@@ -67,18 +67,154 @@ function MiniCalendar({ selectedDate, onSelect }) {
   );
 }
 
+// ─── Wheel Select Component ──────────────────────────────────
+function WheelSelect({ value, options, onChange }) {
+  const containerRef = useRef(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typedValue, setTypedValue] = useState(value);
+
+  // Sync scroll position to the current value initially
+  useEffect(() => {
+    if (isTyping || !containerRef.current) return;
+    const index = options.indexOf(value);
+    if (index >= 0) {
+      containerRef.current.scrollTop = index * 34; // item height is 34px
+    }
+  }, [value, options, isTyping]);
+
+  // Intercept wheel events to reduce sensitivity (1 notch = 1 item)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const direction = Math.sign(e.deltaY);
+      el.scrollBy({ top: direction * 34, behavior: 'smooth' });
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Update value when scroll stops
+  const handleScroll = (e) => {
+    const index = Math.round(e.target.scrollTop / 34);
+    if (options[index] && options[index] !== value) {
+      onChange(options[index]);
+    }
+  };
+
+  const handleDoubleClick = () => {
+    setTypedValue(value);
+    setIsTyping(true);
+  };
+
+  const submitTyping = () => {
+    setIsTyping(false);
+    let padded = typedValue;
+    if (padded.length === 1) padded = '0' + padded;
+    
+    // Only accept valid values for this specific wheel
+    if (options.includes(padded)) {
+      onChange(padded);
+    }
+  };
+
+  if (isTyping) {
+    return (
+      <div className="wheel-select typing-mode">
+        <input 
+          className="wheel-input"
+          type="number"
+          value={typedValue}
+          onChange={e => setTypedValue(e.target.value)}
+          onBlur={submitTyping}
+          onKeyDown={e => { if(e.key === 'Enter') submitTyping() }}
+          autoFocus
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="wheel-select" ref={containerRef} onScroll={handleScroll} onDoubleClick={handleDoubleClick}>
+      <div className="wheel-pad" />
+      {options.map(opt => (
+        <div 
+          key={opt} 
+          className={`wheel-item ${opt === value ? 'selected' : ''}`}
+          onClick={() => {
+            const idx = options.indexOf(opt);
+            if (containerRef.current) {
+              containerRef.current.scrollTo({ top: idx * 34, behavior: 'smooth' });
+            }
+          }}
+        >
+          {opt}
+        </div>
+      ))}
+      <div className="wheel-pad" />
+    </div>
+  );
+}
+
+// ─── Time Select Component ────────────────────────────────────
+function TimeSelect({ value, onChange, minHour = 0, minMinute = 0 }) {
+  const [h, m] = value.split(':');
+  const hNum = parseInt(h, 10);
+  
+  const hours = Array.from({length: 24}, (_, i) => pad(i))
+    .filter(x => parseInt(x, 10) >= minHour);
+
+  // Minutes only constrained if the current hour is exactly the minimum hour
+  const effectiveMinMin = hNum === minHour ? minMinute : 0;
+  const minutes = Array.from({length: 60}, (_, i) => pad(i))
+    .filter(x => parseInt(x, 10) >= effectiveMinMin);
+
+  return (
+    <div className="custom-time-picker">
+      <WheelSelect value={h} options={hours} onChange={newH => onChange(`${newH}:${m}`)} />
+      <span className="time-colon">:</span>
+      <WheelSelect value={m} options={minutes} onChange={newM => onChange(`${h}:${newM}`)} />
+    </div>
+  );
+}
+
 // ─── Event Modal ────────────────────────────────────────────
 function EventModal({ event, isEditing, onSave, onDelete, onClose }) {
+  const extractDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const extractTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  
+  const initialStart = event?.start ? new Date(event.start) : new Date();
+  const initialEnd = event?.end ? new Date(event.end) : new Date(initialStart.getTime() + 3600000);
+
   const [title, setTitle] = useState(event?.title || '');
-  const [start, setStart] = useState(event?.start ? toLocalInput(new Date(event.start)) : '');
-  const [end, setEnd] = useState(event?.end ? toLocalInput(new Date(event.end)) : '');
+  const [startDate, setStartDate] = useState(extractDate(initialStart));
+  const [startTime, setStartTime] = useState(extractTime(initialStart));
+  const [endDate, setEndDate] = useState(extractDate(initialEnd));
+  const [endTime, setEndTime] = useState(extractTime(initialEnd));
   const [color, setColor] = useState(event?.color || CATEGORIES[0].color);
   const [description, setDescription] = useState(event?.description || '');
 
+  // Auto-correct End Date/Time if Start pushes past it
+  useEffect(() => {
+    const s = new Date(`${startDate}T${startTime}:00`);
+    const e = new Date(`${endDate}T${endTime}:00`);
+    if (s > e) {
+      setEndDate(startDate);
+      setEndTime(startTime);
+    }
+  }, [startDate, startTime, endDate, endTime]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!title || !start || !end) return;
-    onSave({ id: event?.id || Date.now(), title, start: new Date(start), end: new Date(end), color, description });
+    if (!title || !startDate || !startTime || !endDate || !endTime) return;
+    
+    const startObj = new Date(`${startDate}T${startTime}:00`);
+    const endObj = new Date(`${endDate}T${endTime}:00`);
+    
+    onSave({ id: event?.id || Date.now(), title, start: startObj, end: endObj, color, description });
   };
 
   return (
@@ -93,11 +229,37 @@ function EventModal({ event, isEditing, onSave, onDelete, onClose }) {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Início</label>
-              <input className="form-input" type="datetime-local" value={start} onChange={e => setStart(e.target.value)} required />
+              <div className="datetime-split">
+                <input 
+                  className="form-input date-part" 
+                  type="date" 
+                  value={startDate} 
+                  onChange={e => setStartDate(e.target.value)}
+                  onClick={e => { try { e.target.showPicker(); } catch(err){} }}
+                  required 
+                />
+                <TimeSelect value={startTime} onChange={setStartTime} />
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Fim</label>
-              <input className="form-input" type="datetime-local" value={end} onChange={e => setEnd(e.target.value)} required />
+              <div className="datetime-split">
+                <input 
+                  className="form-input date-part" 
+                  type="date" 
+                  value={endDate} 
+                  min={startDate}
+                  onChange={e => setEndDate(e.target.value)} 
+                  onClick={e => { try { e.target.showPicker(); } catch(err){} }}
+                  required 
+                />
+                <TimeSelect 
+                  value={endTime} 
+                  onChange={setEndTime} 
+                  minHour={startDate === endDate ? parseInt(startTime.split(':')[0], 10) : 0}
+                  minMinute={startDate === endDate ? parseInt(startTime.split(':')[1], 10) : 0}
+                />
+              </div>
             </div>
           </div>
           <div className="form-group">
@@ -187,12 +349,33 @@ export default function App() {
     return events.filter(e => e.start >= now && e.start <= weekOut).length;
   }, [events]);
 
+  // Inject draft event while creating
+  const displayEvents = useMemo(() => {
+    if (modalState && !modalState.isEditing) {
+      return [...events, { ...modalState.event, id: 'draft-preview', title: 'Novo Evento...' }];
+    }
+    return events;
+  }, [events, modalState]);
+
   // Custom event styling
-  const eventPropGetter = useCallback((event) => ({
-    style: {
-      backgroundColor: event.color || CATEGORIES[0].color,
-    },
-  }), []);
+  const eventPropGetter = useCallback((event) => {
+    if (event.id === 'draft-preview') {
+      return {
+        className: 'rbc-draft-event',
+        style: {
+          backgroundColor: 'rgba(129, 140, 248, 0.3)',
+          border: '1px dashed var(--primary)',
+          color: 'var(--text-primary)',
+          opacity: 0.8,
+        }
+      };
+    }
+    return {
+      style: {
+        backgroundColor: event.color || CATEGORIES[0].color,
+      },
+    };
+  }, []);
 
   // ─── Swipe / Drag Navigation ───────────────────────────────
   const wrapperRef = useRef(null);
@@ -432,7 +615,7 @@ export default function App() {
 
           <Calendar
             localizer={localizer}
-            events={events}
+            events={displayEvents}
             date={calDate}
             view={calView}
             onNavigate={setCalDate}

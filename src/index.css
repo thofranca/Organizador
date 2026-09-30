@@ -4,6 +4,9 @@
    Design Tokens
    ========================================= */
 :root {
+  color-scheme: dark;
+  accent-color: #6366f1;
+
   --primary: #6366f1;
   --primary-hover: #4f46e5;
   --primary-light: rgba(99, 102, 241, 0.12);
@@ -735,14 +738,13 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.75); /* removed backdrop-filter to prevent severe rendering lag */
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 200;
   animation: fadeIn 0.2s ease;
+  padding: 1rem;
 }
 
 .modal-card {
@@ -808,10 +810,174 @@ body {
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 
+/* Split Date/Time UI */
+.datetime-split {
+  display: flex;
+  gap: 8px;
+}
+.datetime-split .date-part {
+  flex: 1.5;
+}
+
+/* Premium styling for Date inputs */
+.form-input[type="date"] {
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.form-input[type="date"]:focus {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+.form-input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  filter: invert(0.8) sepia(1) saturate(3) hue-rotate(190deg); 
+}
+
+.form-input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  transform: scale(1.15) rotate(5deg);
+}
+
+/* Custom Time Picker - Roulette Style */
+.custom-time-picker {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-md);
+  height: 102px; /* 34px * 3 visible items */
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.custom-time-picker:focus-within, .custom-time-picker:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+/* Center Highlight Bar (Purely Visual) */
+.custom-time-picker::before {
+  content: '';
+  position: absolute;
+  top: 34px;
+  left: 10px;
+  right: 10px;
+  height: 34px;
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 6px;
+  pointer-events: none; /* Let scroll events pass through */
+}
+
+.wheel-select {
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+.wheel-select.typing-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 2;
+}
+.wheel-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+/* Hide number arrows */
+.wheel-input::-webkit-outer-spin-button,
+.wheel-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.wheel-input[type=number] {
+  -moz-appearance: textfield;
+}
+.wheel-select::-webkit-scrollbar {
+  display: none;
+}
+.wheel-pad {
+  height: 34px; /* Space to center first/last items */
+}
+.wheel-item {
+  height: 34px;
+  line-height: 34px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  scroll-snap-align: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  user-select: none;
+}
+.wheel-item.selected {
+  color: var(--primary);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+.time-colon {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 1.2rem;
+  margin: 0 4px;
+  z-index: 1; /* Stay above highlight */
+}
+
+.form-input[type="datetime-local"]:focus {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+.form-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  /* Trick to colorize the native black calendar icon to a primary-ish color on dark mode */
+  filter: invert(0.8) sepia(1) saturate(3) hue-rotate(190deg); 
+}
+
+.form-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  transform: scale(1.15) rotate(5deg);
+}
+
 .form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  margin-bottom: 1rem;
+}
+
+.form-row .form-group {
+  flex: 1 1 220px;
+  min-width: 0;
+  margin-bottom: 0; /* Let form-row gap handle internal spacing */
 }
 
 /* Color selector */
@@ -994,4 +1160,28 @@ body {
 .rbc-time-slot:hover {
   background-color: rgba(129, 140, 248, 0.15); /* preview color */
   cursor: pointer;
+}
+
+/* Prevent hover effect on the left time gutter */
+.rbc-time-gutter .rbc-time-slot:hover {
+  background-color: transparent !important;
+  cursor: default;
+}
+
+.rbc-draft-event {
+  animation: pulse-draft 1.5s infinite alternate ease-in-out;
+}
+@keyframes pulse-draft {
+  0% { opacity: 0.5; }
+  100% { opacity: 0.9; }
+}
+
+/* Fix for hover: the events container normally covers the slots and blocks pointer events. */
+.rbc-events-container {
+  pointer-events: none;
+}
+.rbc-event,
+.rbc-background-event,
+.rbc-slot-selection {
+  pointer-events: auto;
 }
