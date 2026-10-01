@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isSameMonth, isSameDay, addDays, addWeeks, subWeeks, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, CalendarDays, ChevronLeft, ChevronRight, Clock, Trash2 } from 'lucide-react';
+import { Plus, CalendarDays, ChevronLeft, ChevronRight, Clock, Trash2, CloudSync, CheckCircle2 } from 'lucide-react';
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './index.css';
@@ -182,7 +182,7 @@ function TimeSelect({ value, onChange, minHour = 0, minMinute = 0 }) {
 }
 
 // ─── Event Modal ────────────────────────────────────────────
-function EventModal({ event, isEditing, onSave, onDelete, onClose }) {
+function EventModal({ event, isEditing, hasGoogleToken, onSave, onDelete, onClose }) {
   const extractDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const extractTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   
@@ -196,6 +196,7 @@ function EventModal({ event, isEditing, onSave, onDelete, onClose }) {
   const [endTime, setEndTime] = useState(extractTime(initialEnd));
   const [color, setColor] = useState(event?.color || CATEGORIES[0].color);
   const [description, setDescription] = useState(event?.description || '');
+  const [syncToGoogle, setSyncToGoogle] = useState(event?.isGoogle || false);
 
   // Auto-correct End Date/Time if Start pushes past it
   useEffect(() => {
@@ -214,7 +215,7 @@ function EventModal({ event, isEditing, onSave, onDelete, onClose }) {
     const startObj = new Date(`${startDate}T${startTime}:00`);
     const endObj = new Date(`${endDate}T${endTime}:00`);
     
-    onSave({ id: event?.id || Date.now(), title, start: startObj, end: endObj, color, description });
+    onSave({ id: event?.id || Date.now(), title, start: startObj, end: endObj, color, description, isGoogle: event?.isGoogle, syncToGoogle });
   };
 
   return (
@@ -281,10 +282,24 @@ function EventModal({ event, isEditing, onSave, onDelete, onClose }) {
               ))}
             </div>
           </div>
+          {hasGoogleToken && (
+            <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '10px' }}>
+              <input 
+                type="checkbox" 
+                id="sync-google" 
+                checked={syncToGoogle} 
+                onChange={e => setSyncToGoogle(e.target.checked)} 
+                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#4285F4' }}
+              />
+              <label htmlFor="sync-google" className="form-label" style={{ margin: 0, cursor: 'pointer', color: '#4285F4' }}>
+                Salvar também no Google Agenda
+              </label>
+            </div>
+          )}
           <div className="modal-actions">
-            {isEditing && <button type="button" className="btn-delete" onClick={() => onDelete(event.id)}><Trash2 size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} />Excluir</button>}
+            {isEditing && (!event.isGoogle || hasGoogleToken) && <button type="button" className="btn-delete" onClick={() => onDelete(event.id)}><Trash2 size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} />Excluir</button>}
             <button type="button" className="btn-cancel" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn-save">Salvar</button>
+            {(!event?.isGoogle || hasGoogleToken) && <button type="submit" className="btn-save">Salvar</button>}
           </div>
         </form>
       </div>
@@ -298,10 +313,89 @@ export default function App() {
   const [modalState, setModalState] = useState(null); // null | { event, isEditing }
   const [calDate, setCalDate] = useState(new Date());
   const [calView, setCalView] = useState('week');
+  const [googleToken, setGoogleToken] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('organizador_events', JSON.stringify(events));
   }, [events]);
+
+  // Load Google Auth on mount
+  useEffect(() => {
+    const authDataStr = localStorage.getItem('organizador_google_auth');
+    if (authDataStr) {
+      try {
+        const authData = JSON.parse(authDataStr);
+        if (authData.expiresAt > new Date().getTime()) {
+          setGoogleToken(authData.token);
+          fetchGoogleEvents(authData.token);
+        } else {
+          localStorage.removeItem('organizador_google_auth');
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  // ─── Google Calendar Sync ─────────────────────────────────
+  const handleGoogleSync = useCallback(() => {
+    if (!window.google) {
+      alert("A biblioteca do Google ainda está carregando ou foi bloqueada pelo navegador.");
+      return;
+    }
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      callback: (response) => {
+        if (response.error) {
+          console.error(response);
+          alert('Erro ao autenticar com o Google.');
+          return;
+        }
+        const expiryTime = new Date().getTime() + (response.expires_in * 1000);
+        localStorage.setItem('organizador_google_auth', JSON.stringify({
+          token: response.access_token,
+          expiresAt: expiryTime
+        }));
+        
+        setGoogleToken(response.access_token);
+        fetchGoogleEvents(response.access_token);
+      },
+    });
+    client.requestAccessToken();
+  }, []);
+
+  const fetchGoogleEvents = async (token) => {
+    try {
+      // Puxa eventos de 1 mês atrás até os futuros
+      const timeMin = new Date();
+      timeMin.setMonth(timeMin.getMonth() - 1);
+      
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin.toISOString()}&maxResults=250&singleEvents=true&orderBy=startTime`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      
+      if (data.items) {
+        const gEvents = data.items.map(item => ({
+          id: item.id,
+          title: item.summary || 'Sem Título',
+          start: new Date(item.start.dateTime || item.start.date),
+          end: new Date(item.end.dateTime || item.end.date),
+          description: item.description || '',
+          color: '#4285F4', // Azul clássico do Google
+          isGoogle: true
+        }));
+        
+        // Mantém os eventos locais criados pelo usuário e substitui os do Google pelos mais recentes
+        setEvents(prev => {
+          const localOnly = prev.filter(e => !e.isGoogle);
+          return [...localOnly, ...gEvents];
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Falha ao importar eventos do Google Agenda.');
+    }
+  };
 
   const handleSelectSlot = useCallback(({ start, end }) => {
     if (swipeRef.current?.wasSwiping) return;
@@ -312,19 +406,67 @@ export default function App() {
     setModalState({ event, isEditing: true });
   }, []);
 
-  const handleSave = useCallback((eventData) => {
+  const handleSave = useCallback(async (eventData) => {
+    let finalEvent = { ...eventData };
+    
+    // Sync to Google Calendar if requested
+    if (eventData.syncToGoogle && googleToken) {
+      try {
+        const gEvent = {
+          summary: eventData.title,
+          description: eventData.description,
+          start: { dateTime: eventData.start.toISOString() },
+          end: { dateTime: eventData.end.toISOString() }
+        };
+        
+        const method = eventData.isGoogle ? 'PUT' : 'POST';
+        const url = eventData.isGoogle 
+          ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventData.id}`
+          : 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(gEvent)
+        });
+        const data = await res.json();
+        
+        if (data.id) {
+          finalEvent = { ...finalEvent, id: data.id, isGoogle: true, color: '#4285F4' };
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Falha ao salvar no Google. O evento foi salvo apenas localmente.');
+      }
+    }
+
     setEvents(prev => {
-      const exists = prev.find(e => e.id === eventData.id);
-      if (exists) return prev.map(e => e.id === eventData.id ? eventData : e);
-      return [...prev, eventData];
+      const exists = prev.find(e => e.id === finalEvent.id);
+      if (exists) return prev.map(e => e.id === finalEvent.id ? finalEvent : e);
+      return [...prev, finalEvent];
     });
     setModalState(null);
-  }, []);
+  }, [googleToken]);
 
-  const handleDelete = useCallback((id) => {
+  const handleDelete = useCallback(async (id) => {
+    const eventToDelete = events.find(e => e.id === id);
+    if (eventToDelete?.isGoogle && googleToken) {
+      try {
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${googleToken}` }
+        });
+      } catch (err) {
+        console.error(err);
+        alert('Falha ao excluir do Google Agenda.');
+      }
+    }
     setEvents(prev => prev.filter(e => e.id !== id));
     setModalState(null);
-  }, []);
+  }, [events, googleToken]);
 
   const handleMiniCalSelect = useCallback((date) => {
     setCalDate(date);
@@ -532,7 +674,25 @@ export default function App() {
             <span className="header-date">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</span>
           </div>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={googleToken ? undefined : handleGoogleSync} 
+            style={{ 
+              display: 'flex', alignItems: 'center', gap: '6px', 
+              background: googleToken ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-elevated)', 
+              border: `1px solid ${googleToken ? '#10b981' : 'var(--border)'}`, 
+              color: googleToken ? '#10b981' : 'var(--text-primary)', 
+              padding: '8px 14px', borderRadius: 'var(--radius)', 
+              cursor: googleToken ? 'default' : 'pointer', 
+              transition: '0.2s', fontSize: '0.9rem', fontWeight: '500' 
+            }}
+            onMouseOver={e => !googleToken && (e.currentTarget.style.borderColor = '#4285F4')}
+            onMouseOut={e => !googleToken && (e.currentTarget.style.borderColor = 'var(--border)')}
+          >
+            {googleToken ? <CheckCircle2 size={18} color="#10b981" /> : <CloudSync size={18} color="#4285F4" />}
+            {googleToken ? 'Google Sincronizado' : 'Sincronizar Google'}
+          </button>
+          
           <button className="new-event-btn" style={{ width: 'auto', padding: '8px 20px' }} onClick={() => {
             const now = new Date();
             const end = new Date(now.getTime() + 3600000);
@@ -656,6 +816,7 @@ export default function App() {
         <EventModal
           event={modalState.event}
           isEditing={modalState.isEditing}
+          hasGoogleToken={!!googleToken}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setModalState(null)}
