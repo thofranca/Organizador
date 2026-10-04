@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isSameMonth, isSameDay, addDays, addWeeks, subWeeks, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, CalendarDays, ChevronLeft, ChevronRight, Clock, Trash2, CloudSync, CheckCircle2 } from 'lucide-react';
+import { Plus, CalendarDays, ChevronLeft, ChevronRight, Clock, Trash2, CloudSync, CheckCircle2, Wallet } from 'lucide-react';
+import Financas from './Financas';
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './index.css';
@@ -314,6 +315,7 @@ export default function App() {
   const [calDate, setCalDate] = useState(new Date());
   const [calView, setCalView] = useState('week');
   const [googleToken, setGoogleToken] = useState(null);
+  const [activeTab, setActiveTab] = useState('calendar');
 
   useEffect(() => {
     localStorage.setItem('organizador_events', JSON.stringify(events));
@@ -664,152 +666,174 @@ export default function App() {
   const prevLabel = calView === 'day' ? '← Dia anterior' : calView === 'week' ? '← Semana anterior' : '← Mês anterior';
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${activeTab === 'finances' ? 'app-layout-full' : ''}`}>
       {/* ── Header ── */}
       <header className="app-header">
-        <div className="app-logo">
-          <div className="app-logo-icon"><CalendarDays size={20} /></div>
-          <div>
-            <h1>Organizador</h1>
-            <span className="header-date">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</span>
+        <div className="header-left">
+          <div className="app-logo">
+            <div className="app-logo-icon"><CalendarDays size={20} /></div>
+            <div>
+              <h1>Organizador</h1>
+              <span className="header-date">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</span>
+            </div>
           </div>
+          <nav className="tab-nav">
+            <button className={`tab-btn ${activeTab === 'calendar' ? 'tab-active' : ''}`} onClick={() => setActiveTab('calendar')}>
+              <CalendarDays size={16} />
+              Calendário
+            </button>
+            <button className={`tab-btn ${activeTab === 'finances' ? 'tab-active' : ''}`} onClick={() => setActiveTab('finances')}>
+              <Wallet size={16} />
+              Finanças
+            </button>
+          </nav>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            onClick={googleToken ? undefined : handleGoogleSync} 
-            style={{ 
-              display: 'flex', alignItems: 'center', gap: '6px', 
-              background: googleToken ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-elevated)', 
-              border: `1px solid ${googleToken ? '#10b981' : 'var(--border)'}`, 
-              color: googleToken ? '#10b981' : 'var(--text-primary)', 
-              padding: '8px 14px', borderRadius: 'var(--radius)', 
-              cursor: googleToken ? 'default' : 'pointer', 
-              transition: '0.2s', fontSize: '0.9rem', fontWeight: '500' 
-            }}
-            onMouseOver={e => !googleToken && (e.currentTarget.style.borderColor = '#4285F4')}
-            onMouseOut={e => !googleToken && (e.currentTarget.style.borderColor = 'var(--border)')}
-          >
-            {googleToken ? <CheckCircle2 size={18} color="#10b981" /> : <CloudSync size={18} color="#4285F4" />}
-            {googleToken ? 'Google Sincronizado' : 'Sincronizar Google'}
-          </button>
-          
-          <button className="new-event-btn" style={{ width: 'auto', padding: '8px 20px' }} onClick={() => {
-            const now = new Date();
-            const end = new Date(now.getTime() + 3600000);
-            setModalState({ event: { start: now, end, color: CATEGORIES[0].color }, isEditing: false });
-          }}>
-            <Plus size={18} />
-            Novo Evento
-          </button>
-        </div>
+        {activeTab === 'calendar' && (
+          <div className="header-actions" style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={googleToken ? undefined : handleGoogleSync} 
+              style={{ 
+                display: 'flex', alignItems: 'center', gap: '6px', 
+                background: googleToken ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-elevated)', 
+                border: `1px solid ${googleToken ? '#10b981' : 'var(--border)'}`, 
+                color: googleToken ? '#10b981' : 'var(--text-primary)', 
+                padding: '8px 14px', borderRadius: 'var(--radius)', 
+                cursor: googleToken ? 'default' : 'pointer', 
+                transition: '0.2s', fontSize: '0.9rem', fontWeight: '500' 
+              }}
+              onMouseOver={e => !googleToken && (e.currentTarget.style.borderColor = '#4285F4')}
+              onMouseOut={e => !googleToken && (e.currentTarget.style.borderColor = 'var(--border)')}
+            >
+              {googleToken ? <CheckCircle2 size={18} color="#10b981" /> : <CloudSync size={18} color="#4285F4" />}
+              {googleToken ? 'Google Sincronizado' : 'Sincronizar Google'}
+            </button>
+            
+            <button className="new-event-btn" style={{ width: 'auto', padding: '8px 20px' }} onClick={() => {
+              const now = new Date();
+              const end = new Date(now.getTime() + 3600000);
+              setModalState({ event: { start: now, end, color: CATEGORIES[0].color }, isEditing: false });
+            }}>
+              <Plus size={18} />
+              Novo Evento
+            </button>
+          </div>
+        )}
       </header>
 
-      {/* ── Sidebar ── */}
-      <aside className="sidebar">
-        <MiniCalendar selectedDate={calDate} onSelect={handleMiniCalSelect} />
+      {/* ── Sidebar (only for calendar) ── */}
+      {activeTab === 'calendar' && (
+        <aside className="sidebar">
+          <MiniCalendar selectedDate={calDate} onSelect={handleMiniCalSelect} />
 
-        <div className="sidebar-section">
-          <span className="sidebar-section-title">Resumo</span>
-          <div className="stats-row">
-            <div className="stat-card">
-              <div className="stat-value">{todayCount}</div>
-              <div className="stat-label">Hoje</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{weekCount}</div>
-              <div className="stat-label">7 dias</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{events.length}</div>
-              <div className="stat-label">Total</div>
+          <div className="sidebar-section">
+            <span className="sidebar-section-title">Resumo</span>
+            <div className="stats-row">
+              <div className="stat-card">
+                <div className="stat-value">{todayCount}</div>
+                <div className="stat-label">Hoje</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{weekCount}</div>
+                <div className="stat-label">7 dias</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{events.length}</div>
+                <div className="stat-label">Total</div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="sidebar-section">
-          <span className="sidebar-section-title">Próximos Eventos</span>
-          {upcomingEvents.length === 0 ? (
-            <div className="no-events">Nenhum evento nos próximos 7 dias.</div>
-          ) : (
-            <div className="upcoming-list">
-              {upcomingEvents.map(ev => (
-                <div key={ev.id} className="upcoming-item" onClick={() => handleSelectEvent(ev)}>
-                  <span className="upcoming-dot" style={{ backgroundColor: ev.color || CATEGORIES[0].color }} />
-                  <div className="upcoming-info">
-                    <div className="upcoming-title">{ev.title}</div>
-                    <div className="upcoming-time">
-                      <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
-                      {format(ev.start, "EEE, dd MMM · HH:mm", { locale: ptBR })}
+          <div className="sidebar-section">
+            <span className="sidebar-section-title">Próximos Eventos</span>
+            {upcomingEvents.length === 0 ? (
+              <div className="no-events">Nenhum evento nos próximos 7 dias.</div>
+            ) : (
+              <div className="upcoming-list">
+                {upcomingEvents.map(ev => (
+                  <div key={ev.id} className="upcoming-item" onClick={() => handleSelectEvent(ev)}>
+                    <span className="upcoming-dot" style={{ backgroundColor: ev.color || CATEGORIES[0].color }} />
+                    <div className="upcoming-info">
+                      <div className="upcoming-title">{ev.title}</div>
+                      <div className="upcoming-time">
+                        <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                        {format(ev.start, "EEE, dd MMM · HH:mm", { locale: ptBR })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </aside>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
 
       {/* ── Main ── */}
-      <main className="main-content">
-        <div
-          className="calendar-wrapper"
-          ref={wrapperRef}
-          onMouseDown={handlePointerDown}
-          onMouseMove={handlePointerMove}
-          onMouseUp={handlePointerUp}
-          onMouseLeave={handlePointerUp}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          {/* Swipe hints (opacity controlled via CSS vars) */}
-          <div className="swipe-hint next" style={{ opacity: 'var(--hint-next-opacity, 0)', transition: 'opacity 0.1s' }}>
-            <div className="swipe-hint-bar" style={{ transform: 'scaleX(var(--hint-next-scale, 0))' }} />
-            <span className="swipe-hint-label">{nextLabel}</span>
-          </div>
+      {activeTab === 'calendar' ? (
+        <main className="main-content">
+          <div
+            className="calendar-wrapper"
+            ref={wrapperRef}
+            onMouseDown={handlePointerDown}
+            onMouseMove={handlePointerMove}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Swipe hints (opacity controlled via CSS vars) */}
+            <div className="swipe-hint next" style={{ opacity: 'var(--hint-next-opacity, 0)', transition: 'opacity 0.1s' }}>
+              <div className="swipe-hint-bar" style={{ transform: 'scaleX(var(--hint-next-scale, 0))' }} />
+              <span className="swipe-hint-label">{nextLabel}</span>
+            </div>
 
-          <div className="swipe-hint prev" style={{ opacity: 'var(--hint-prev-opacity, 0)', transition: 'opacity 0.1s' }}>
-            <div className="swipe-hint-bar" style={{ transform: 'scaleX(var(--hint-prev-scale, 0))' }} />
-            <span className="swipe-hint-label">{prevLabel}</span>
-          </div>
+            <div className="swipe-hint prev" style={{ opacity: 'var(--hint-prev-opacity, 0)', transition: 'opacity 0.1s' }}>
+              <div className="swipe-hint-bar" style={{ transform: 'scaleX(var(--hint-prev-scale, 0))' }} />
+              <span className="swipe-hint-label">{prevLabel}</span>
+            </div>
 
-          <Calendar
-            localizer={localizer}
-            events={displayEvents}
-            date={calDate}
-            view={calView}
-            onNavigate={setCalDate}
-            onView={setCalView}
-            startAccessor="start"
-            endAccessor="end"
-            style={{ height: '100%' }}
-            selectable="ignoreEvents"
-            longPressThreshold={250}
-            onSelectSlot={handleSelectSlot}
-            onSelectEvent={handleSelectEvent}
-            eventPropGetter={eventPropGetter}
-            culture="pt-BR"
-            messages={{
-              next: "Próximo",
-              previous: "Anterior",
-              today: "Hoje",
-              month: "Mês",
-              week: "Semana",
-              day: "Dia",
-              agenda: "Agenda",
-              date: "Data",
-              time: "Hora",
-              event: "Evento",
-              noEventsInRange: "Nenhum evento neste período.",
-              showMore: (total) => `+${total} mais`,
-            }}
-            defaultView="week"
-            views={['month', 'week', 'day', 'agenda']}
-            popup
-            scrollToTime={new Date(1970, 1, 1, 7, 0, 0)}
-          />
-        </div>
-      </main>
+            <Calendar
+              localizer={localizer}
+              events={displayEvents}
+              date={calDate}
+              view={calView}
+              onNavigate={setCalDate}
+              onView={setCalView}
+              startAccessor="start"
+              endAccessor="end"
+              style={{ height: '100%' }}
+              selectable="ignoreEvents"
+              longPressThreshold={250}
+              onSelectSlot={handleSelectSlot}
+              onSelectEvent={handleSelectEvent}
+              eventPropGetter={eventPropGetter}
+              culture="pt-BR"
+              messages={{
+                next: "Próximo",
+                previous: "Anterior",
+                today: "Hoje",
+                month: "Mês",
+                week: "Semana",
+                day: "Dia",
+                agenda: "Agenda",
+                date: "Data",
+                time: "Hora",
+                event: "Evento",
+                noEventsInRange: "Nenhum evento neste período.",
+                showMore: (total) => `+${total} mais`,
+              }}
+              defaultView="week"
+              views={['month', 'week', 'day', 'agenda']}
+              popup
+              scrollToTime={new Date(1970, 1, 1, 7, 0, 0)}
+            />
+          </div>
+        </main>
+      ) : (
+        <main className="main-content main-content-full">
+          <Financas />
+        </main>
+      )}
 
       {/* ── Modal ── */}
       {modalState && (
